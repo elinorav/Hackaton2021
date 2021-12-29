@@ -12,6 +12,10 @@ class Server:
         :param tcp_port: the servers TCP port given to us
         """
 
+        self.CEND = '\033[0m'
+        self.BLUE = '\033[34m'
+        self.CBLACK = '\33[30m'
+
         if test_network:
             self.network = 'eth2'
         else:
@@ -41,18 +45,9 @@ class Server:
         """
         we broadcast offer messages from our UDP socket until we have two TCP connections
         """
-        # address = scapy.get_if_addr(self.network)
-        while not self.players_ready():
-            # TODO: change network ip
-            # '255.255.255.255'
+        while not (self.client1 is not None and self.client2 is not None):
             self.udp_socket.sendto(self.msg, ('255.255.255.255', self.looking_port))
             time.sleep(1)
-
-    def players_ready(self):
-        """
-        :return: true if we have 2 connections and two clients
-        """
-        return self.client1 is not None and self.client2 is not None
 
     def waiting_for_clients(self):
         """
@@ -65,7 +60,7 @@ class Server:
         broad.start()
         players_lst = []
         self.tcp_socket.listen(2)
-        while not self.players_ready():
+        while not (self.client1 is not None and self.client2 is not None):
             if self.client1 is None:
                 try:
                     self.client1, address = self.tcp_socket.accept()
@@ -88,9 +83,8 @@ class Server:
 
 
     def wait_for_answer(self, reset_event, client, res, times, i):
-        current = time.time()
-        limit = current + 10
-        client.setblocking(0)
+        current_time = time.time()
+        client.setblocking(0) #the socket is put in non-blocking mode. no timeout
         while not reset_event.is_set():
             try:
                 res[i] = client.recv(1024).decode('UTF-8')
@@ -98,12 +92,12 @@ class Server:
                     print("issue with res[i]")
             except Exception as e:
                 print(e)
-            if time.time() > limit:
+            if time.time() > current_time + 10:
                 reset_event.set()
             if res[i] != 767:
-                if limit < 0:
+                if current_time + 10 < 0:
                     print("issue with timing")
-                times[i] = time.time() - current
+                times[i] = time.time() - current_time + 10
                 reset_event.set()
 
 

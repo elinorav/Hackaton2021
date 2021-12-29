@@ -30,7 +30,7 @@ class Client:
         self.offer_message_type = 0x2
 
 
-    def looking_for_server(self):
+    def looking_for_a_server(self):
         '''
         Looking for server to connect.
         '''
@@ -123,7 +123,7 @@ class Client:
 
         print("Client started, listening for offer requests...")
         while True:
-            self.looking_for_server()
+            self.looking_for_a_server()
             if self.connecting_to_server():
                 try:
                     msg = self.game_mode()
