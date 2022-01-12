@@ -7,11 +7,7 @@ import scapy.all as scapy
 
 class Server:
     def __init__(self, tcp_port):
-        #maybe add , test_network=False in the arguments
-        # if test_network:
-        #     self.network = 'eth2'
-        # else:
-        #     self.network = 'eth1'
+       
         self.CRED = '\033[91m'
         self.CBOLD = '\33[1m'
         self.YELLOW = '\033[33m'
@@ -62,11 +58,14 @@ class Server:
         self.tcp_socket.listen()
         broad = Thread(target=self.broadcast)
         broad.start()
+        players_lst = []
         self.tcp_socket.listen(2)
-        while not (self.client1 is not None and self.client2 is not None): #check if we get 2 clients
+        while not self.players_ready():
             if self.client1 is None:
                 try:
                     self.client1, address = self.tcp_socket.accept()
+                    if address is None:
+                        print("issue with address")
                     self.client1_name = self.client1.recv(1024).decode('UTF-8')
                 except:
                     self.client1 = None
@@ -74,6 +73,8 @@ class Server:
             elif self.client2 is None:
                 try:
                     self.client2, address = self.tcp_socket.accept()
+                    if address is None:
+                        print("issue with address")
                     self.client2_name = self.client2.recv(1024).decode('UTF-8')
                 except:
                     self.client2 = None
@@ -88,6 +89,8 @@ class Server:
         while not reset_event.is_set():
             try:
                 res[i] = client.recv(1024).decode('UTF-8')
+                if res[i] is None:
+                    print("issue with res[i]")
             except socket.error as msg:
                 if msg.errno == 10054: #an error that usually occurs when an existing connection is forcibly closed by the remote host
                     raise Exception("One of the clients has disconnected")
@@ -97,6 +100,8 @@ class Server:
             if time.time() > current_time + 10:
                 reset_event.set()
             if res[i] != 767:
+                if limit < 0:
+                    print("issue with timing")
                 times[i] = time.time() - current_time
                 reset_event.set()
 
@@ -105,7 +110,7 @@ class Server:
         num1 = randint(0, 9)
         num2 = randint(0, 9 - num1)
         sum_result = num1 + num2
-        msg = self.CGREEN + "Welcome to Quick Maths.\n" \
+        msg = self.CGREEN + "Welcome to Quick Maths!!\n" \
                           f"Player 1: {self.client1_name} \n" \
                           f"Player 2: {self.client2_name} \n==\n" \
                           "Please answer the following question as fast as you can:\n" \
@@ -116,22 +121,30 @@ class Server:
         except:
             raise Exception(self.CRED + "could not send to players the welcome message" + self.CEND)
 
-        results = [767, 767]
+        results = [999, 999]
+        wins_count_T1 = 0
+        wins_count_T2 = 0
         times = [10, 10]
         reset_event = Event()
-
-        t1 = Thread(target=self.wait_for_answer, args=[reset_event, self.client1, results, times, 0])
-        t2 = Thread(target=self.wait_for_answer, args=[reset_event, self.client2, results, times, 1])
-        t1.start()
-        t2.start()
+        try:
+            t1 = Thread(target=self.wait_for_answer, args=[reset_event, self.client1, results, times, 0])
+            if t1 is None:
+                print("issue threading Check doc")
+            t2 = Thread(target=self.wait_for_answer, args=[reset_event, self.client2, results, times, 1])
+            if t2 is None:
+                print("issue threading Check doc")
+            t1.start()
+            t2.start()
+        except Exception as e:
+            print(e)
 
         while not reset_event.is_set():
             time.sleep(0.3)
 
         end_msg = self.CBEIGE + f"Game over!\nThe correct answer was {sum_result}!\n"
 
-        if (results[0] == 767 and results[1] == 767):
-            return end_msg + "Both of you are losers, next time don't sleep on your keyboard"
+        if (results[0] == 999 and results[1] == 999):
+            return end_msg + "No one responded"
 
         elif (times[0] < times[1]):
             if (results[0] == sum_result):
@@ -152,8 +165,7 @@ class Server:
             self.waiting_for_clients()
             print(
                 self.BLUE + f"Received offer from {self.client1_name} and {self.client2_name}, attempting to connect..." + self.CEND)
-            # TODO: change to 10 seconds, game starts 10 seconds after both players have connected.
-            time.sleep(3)
+            time.sleep(5)
             try:
                 summary = self.game_mode()
                 self.client1.send(bytes(summary, 'UTF-8'))
@@ -168,6 +180,6 @@ class Server:
 
 
 if __name__ == "__main__":
-    server = Server(17670)
+    server = Server(15000)
     server.start()
 
