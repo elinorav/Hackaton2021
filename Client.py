@@ -9,9 +9,21 @@ os.system("")
 class Client:
 
     def __init__(self):
-        '''
-        The Client constructor, init our game client.
-        '''
+
+        self.CRED = '\033[91m'
+        self.CBOLD = '\33[1m'
+        self.YELLOW = '\033[33m'
+        self.BLUE = '\033[34m'
+        self.CGREEN = '\33[32m'
+        self.CBLINK = '\33[5m'
+        self.CREDBG = '\33[41m'
+        self.CGREENBG = '\33[42m'
+        self.CYELLOWBG = '\33[43m'
+        self.CBLUEBG = '\33[44m'
+        self.CEND = '\033[0m'
+        self.CBEIGE  = '\33[36m'
+        self.CVIOLET = '\33[35m'
+
         self.looking_port = 13117
 
         self.server_found = False
@@ -31,86 +43,62 @@ class Client:
 
 
     def looking_for_a_server(self):
-        '''
-        Looking for server to connect.
-        '''
         while True:
-
             verifaction_tcp, adress = self.udp_socket.recvfrom(1024)
-            if verifaction_tcp is None:
-                print("issue with verifaction_tcp")
-            if adress is None:
-                print("issue with adress")
             recieved_cookie = hex(int(verifaction_tcp.hex()[:8], 16))
-            if recieved_cookie is None:
-                print("issue with recieved_cookie")
             recieved_type = verifaction_tcp.hex()[9:10]
-            if recieved_type is None:
-                print("issue with recieved_type")
             recieved_port = verifaction_tcp.hex()[10:]
-            if recieved_port is None:
-                print("issue with recieved_port")
 
             if (recieved_cookie == hex(self.magic_cookie) and int(recieved_type) == self.offer_message_type):
                 self.tcp_port = int(recieved_port, 16)
-                if self.tcp_port is None:
-                    print("issue with tcp_port")
-                self.ip = adress[0]
-                print(self.BLUE +"Recieved offer from " + str(self.ip) + ", attempting to connect...\n" + self.CEND)
-                break
+                if self.tcp_port == 17670:
+                    self.ip = adress[0]
+                    print(self.CVIOLET +"Recieved offer from " + str(self.ip) + ", attempting to connect...\n" + self.CEND)
+                    break
 
 
-    def connecting_to_server(self):
+    def connecting_to_a_server(self):
         try:
             self.tcp_socket.connect((self.ip, self.tcp_port))
         except:
-            print("Couldn't connect to server, listening for offer requests...")
+            print(self.CRED + "Couldn't connect to server, listening for offer requests..."+ self.CEND)
             return False
         team_msg = bytes(self.name, 'UTF-8')
-        if team_msg is None:
-            print("issue with team msg")
         try:
             self.tcp_socket.send(team_msg)
             welcome = self.tcp_socket.recv(1024)
-            if welcome is None:
-                print("issue with welcome msg")
             print(welcome.decode('UTF-8'))
             return True
         except:
-            print("Couldn't connect to server, listening for offer requests...")
+            print(self.CRED + "Couldn't connect to server, listening for offer requests..." + self.CEND )
             return False
 
 
     def game_mode(self):
-
-        while msvcrt.kbhit():
-            msvcrt.getch()
+        while msvcrt.KBHit().kbhit():
+            msvcrt.KBHit().getch()
         current = time.time()
-        self.tcp_socket.setblocking(0)
+        self.tcp_socket.setblocking(0)  #the socket is put in non-blocking mode. no timeout
         msg = None
-        while not msvcrt.kbhit():
+        while not msvcrt.KBHit().kbhit():
             msg = self.expect_message()
             if msg:
                 break
-            if current + 10 < time.time():
+            #timeout in case the server has disconnected
+            if current + 11 <= time.time():
                 raise Exception("Server disconnected")
 
         if not msg:
-            char = msvcrt.getch()
-            if char is None:
-                print("issue with char at 101")
+            char = msvcrt.KBHit().getch()
             self.tcp_socket.send(char)
             while not msg:
                 msg = self.expect_message()
-                if msg is None:
-                    print("issue with msg at 106")
-                if current + 10 < time.time():
+                if current + 11 <= time.time():
                     raise Exception("Server disconnected")
         return msg
 
 
     def expect_message(self):
-
         msg = None
         try:
             msg = self.tcp_socket.recv(1024)
@@ -120,19 +108,20 @@ class Client:
 
 
     def start(self):
-
-        print("Client started, listening for offer requests...")
+        print(self.BLUE + "Client started, listening for offer requests..." + self.CEND)
         while True:
             self.looking_for_a_server()
-            if self.connecting_to_server():
+            if self.connecting_to_a_server():
                 try:
                     msg = self.game_mode()
                 except:
-                    print("Server disconnected duo to error, listening for offer requests...")
+                    print(self.CRED + "Server disconnected duo to error, listening for offer requests..." + self.CEND)
                 else:
-                    print(msg.decode('UTF-8'))
-                    print("Server disconnected, listening for offer requests...")
+                    print(self.BLUE + msg.decode('UTF-8') + self.CEND)
+                    print(self.BLUE + "Server disconnected, listening for offer requests..." + self.CEND)
             self.__init__()
+
+
 
 
 if __name__ == "__main__":

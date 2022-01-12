@@ -6,34 +6,42 @@ import scapy.all as scapy
 
 
 class Server:
-    def __init__(self, tcp_port, test_network=False):
-        """
-        This server can only be connected to two clients for the game
-        :param tcp_port: the servers TCP port given to us
-        """
-
-        self.CEND = '\033[0m'
+    def __init__(self, tcp_port):
+        #maybe add , test_network=False in the arguments
+        # if test_network:
+        #     self.network = 'eth2'
+        # else:
+        #     self.network = 'eth1'
+        self.CRED = '\033[91m'
+        self.CBOLD = '\33[1m'
+        self.YELLOW = '\033[33m'
         self.BLUE = '\033[34m'
-        self.CBLACK = '\33[30m'
+        self.CGREEN = '\33[32m'
+        self.CBLINK = '\33[5m'
+        self.CREDBG = '\33[41m'
+        self.CGREENBG = '\33[42m'
+        self.CYELLOWBG = '\33[43m'
+        self.CBLUEBG = '\33[44m'
+        self.CEND = '\033[0m'
+        self.CBEIGE  = '\33[36m'
+        self.CVIOLET2 = '\33[95m'
 
-        if test_network:
-            self.network = 'eth2'
-        else:
-            self.network = 'eth1'
+        self.network = 'eth1'
 
         self.looking_port = 13117
         self.tcp_port = tcp_port
 
-        try:
-            self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-            self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            self.ip = socket.gethostbyname(socket.gethostname())
-            self.msg = 0xabcddcba.to_bytes(byteorder='big', length=4) + 0x2.to_bytes(byteorder='big',
-                                                                                 length=1) + tcp_port.to_bytes(byteorder='big', length=2)
+        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-        except Exception as e:
-            print(e)
+
+        self.ip = socket.gethostbyname(socket.gethostname())
+        self.msg = 0xabcddcba.to_bytes(byteorder='big', length=4) + 0x2.to_bytes(byteorder='big',
+                                                                                 length=1) + tcp_port.to_bytes(
+            byteorder='big', length=2)
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.tcp_socket.bind(("", tcp_port))
 
         self.client1 = None
@@ -41,31 +49,24 @@ class Server:
         self.client2 = None
         self.client2_name = None
 
+    #we broadcast offer packets on the UDP socket until we get two TCP connections from 2 clients
     def broadcast(self):
-        """
-        we broadcast offer messages from our UDP socket until we have two TCP connections
-        """
-        while not (self.client1 is not None and self.client2 is not None):
+        while not (self.client1 is not None and self.client2 is not None):  #check if we get 2 clients
             self.udp_socket.sendto(self.msg, ('255.255.255.255', self.looking_port))
             time.sleep(1)
 
+
+    #start listening on the servers TCP socket, the UDP socket will send broadcast offers and get clients
     def waiting_for_clients(self):
-        """
-        in this state  we start listening on the servers TCP socket, the UDP socket will send broadcast offers and find clients that will connect to our Tcp SOCKET that will open a socket for each client(as learned in the course)
-        after connection the clients will send the Server their team names, then we are read to start the game
-        """
-        print("Server started, listening on IP address " + self.ip)
+        print(self.YELLOW + "Server started, listening on IP address " + self.ip + self.CEND)
         self.tcp_socket.listen()
         broad = Thread(target=self.broadcast)
         broad.start()
-        players_lst = []
         self.tcp_socket.listen(2)
-        while not (self.client1 is not None and self.client2 is not None):
+        while not (self.client1 is not None and self.client2 is not None): #check if we get 2 clients
             if self.client1 is None:
                 try:
                     self.client1, address = self.tcp_socket.accept()
-                    if address is None:
-                        print("issue with address")
                     self.client1_name = self.client1.recv(1024).decode('UTF-8')
                 except:
                     self.client1 = None
@@ -73,8 +74,6 @@ class Server:
             elif self.client2 is None:
                 try:
                     self.client2, address = self.tcp_socket.accept()
-                    if address is None:
-                        print("issue with address")
                     self.client2_name = self.client2.recv(1024).decode('UTF-8')
                 except:
                     self.client2 = None
@@ -82,116 +81,93 @@ class Server:
         broad.join()
 
 
+    #the server is waiting for answers of the clients
     def wait_for_answer(self, reset_event, client, res, times, i):
         current_time = time.time()
-        client.setblocking(0) #the socket is put in non-blocking mode. no timeout
+        client.setblocking(0)   #the socket is put in non-blocking mode. no timeout
         while not reset_event.is_set():
             try:
                 res[i] = client.recv(1024).decode('UTF-8')
-                if res[i] is None:
-                    print("issue with res[i]")
-            except Exception as e:
-                print(e)
+            except socket.error as msg:
+                if msg.errno == 10054: #an error that usually occurs when an existing connection is forcibly closed by the remote host
+                    raise Exception("One of the clients has disconnected")
+                else:
+                    pass
+
             if time.time() > current_time + 10:
                 reset_event.set()
             if res[i] != 767:
-                if current_time + 10 < 0:
-                    print("issue with timing")
-                times[i] = time.time() - current_time + 10
+                times[i] = time.time() - current_time
                 reset_event.set()
 
 
     def game_mode(self):
         num1 = randint(0, 9)
         num2 = randint(0, 9 - num1)
-        if num1 + num2 < 0:
-            print("issue with randint")
-        res = num1 + num2
-        msg = "Welcome to Quick Maths.\n" \
+        sum_result = num1 + num2
+        msg = self.CGREEN + "Welcome to Quick Maths.\n" \
                           f"Player 1: {self.client1_name} \n" \
                           f"Player 2: {self.client2_name} \n==\n" \
                           "Please answer the following question as fast as you can:\n" \
-                          f"How much is {num1} + {num2}?"
+                          f"How much is {num1} + {num2}?" + self.CEND
         try:
             self.client1.send(bytes(msg, 'UTF-8'))
             self.client2.send(bytes(msg, 'UTF-8'))
-        except Exception as e:
-            print(e)
+        except:
+            raise Exception(self.CRED + "could not send to players the welcome message" + self.CEND)
 
-        results = [999, 999]
-        wins_count_T1 = 0
-        wins_count_T2 = 0
+        results = [767, 767]
         times = [10, 10]
         reset_event = Event()
-        try:
-            t1 = Thread(target=self.wait_for_answer, args=[reset_event, self.client1, results, times, 0])
-            if t1 is None:
-                print("issue threading Check doc")
-            t2 = Thread(target=self.wait_for_answer, args=[reset_event, self.client2, results, times, 1])
-            if t2 is None:
-                print("issue threading Check doc")
-            t1.start()
-            t2.start()
-        except Exception as e:
-            print(e)
+
+        t1 = Thread(target=self.wait_for_answer, args=[reset_event, self.client1, results, times, 0])
+        t2 = Thread(target=self.wait_for_answer, args=[reset_event, self.client2, results, times, 1])
+        t1.start()
+        t2.start()
+
         while not reset_event.is_set():
-            time.sleep(0.2)
-        end_msg = f"Game over!\nThe correct answer was {res}!\n"
+            time.sleep(0.3)
 
-        if results[0] == 999 and results[1] == 999:
-            return end_msg + "No one responded"
+        end_msg = self.CBEIGE + f"Game over!\nThe correct answer was {sum_result}!\n"
 
-        elif times[0] < times[1]:
-            if results[0] == res:
-                wins_count_T1 += 1
-                if wins_count_T1 <= 0:
-                    print("First win for T1 !")
-                return end_msg + f"Congratulations to the winner: {self.client1_name}"
+        if (results[0] == 767 and results[1] == 767):
+            return end_msg + "Both of you are losers, next time don't sleep on your keyboard"
+
+        elif (times[0] < times[1]):
+            if (results[0] == sum_result):
+                return end_msg + f"Congratulations to the winner: {self.client1_name}" + self.CEND
             else:
-                wins_count_T2 += 1
-                if wins_count_T2 <= 0:
-                    print("First win for T2 !")
-                return end_msg + f"Congratulations to the winner: {self.client2_name}"
+                return end_msg + f"Congratulations to the winner: {self.client2_name}" + self.CEND
 
-        elif times[0] > times[1]:
-            if results[1] == res:
-                wins_count_T2 += 1
-                if wins_count_T2 <= 0:
-                    print("First win for T2 !")
-                return end_msg + f"Congratulations to the winner: {self.client2_name}"
+        elif (times[0] > times[1]):
+            if (results[1] == sum_result):
+                return end_msg + f"Congratulations to the winner: {self.client2_name}" + self.CEND
             else:
-                wins_count_T1 += 1
-                if wins_count_T1 <= 0:
-                    print("First win for T1 !")
-                return end_msg + f"Congratulations to the winner: {self.client1_name}"
+                return end_msg + f"Congratulations to the winner: {self.client1_name}" + self.CEND
+
 
     def start(self):
         while True:
 
             self.waiting_for_clients()
             print(
-                f"Received offer from {self.client1_name} and {self.client2_name}, attempting to connect...")
-            time.sleep(10)
+                self.BLUE + f"Received offer from {self.client1_name} and {self.client2_name}, attempting to connect..." + self.CEND)
+            # TODO: change to 10 seconds, game starts 10 seconds after both players have connected.
+            time.sleep(3)
             try:
                 summary = self.game_mode()
-                if summary is None:
-                    print("issue with summary")
-                try:
-                    sends_count = 0
-                    self.client1.send(bytes(summary, 'UTF-8'))
-                    sends_count += 1
-                    self.client2.send(bytes(summary, 'UTF-8'))
-                    sends_count += 1
-                    self.tcp_socket.close()
-                    print("Game over, sending out offer requests...")
-                except Exception as e:
-                    print(e)
+                self.client1.send(bytes(summary, 'UTF-8'))
+                self.client2.send(bytes(summary, 'UTF-8'))
+                self.tcp_socket.close()
+                print(self.CVIOLET2 + "Game over, sending out offer requests...\n" + self.CEND)
+
             except:
-                print("the game has been interrupted due to one of the clients disconnecting")
-                print("Game over, sending out offer requests...")
+                print(self.CRED + "the game has been interrupted due to one of the clients disconnecting" + self.CEND)
+                print(self.CRED + "Game over, sending out offer requests..." + self.CEND)
             self.__init__(self.tcp_port)
 
 
 if __name__ == "__main__":
-    server = Server(17671)
+    server = Server(17670)
     server.start()
+
